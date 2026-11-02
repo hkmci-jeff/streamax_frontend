@@ -430,86 +430,40 @@ export function AdminAudit() {
 // ── Buckets ─────────────────────────────────────────────────────────────────
 
 export function AdminBuckets() {
-  const [buckets, error, reload, setError] = useLoad(() => api("/dpr-admin/buckets"), []);
-  const [form, setForm] = useState({ alias: "", bucket_name: "", label: "" });
-  const [busy, setBusy] = useState(false);
-  const [notice, setNotice] = useState(null);
-
-  async function add(e) {
-    e.preventDefault(); setError(null); setNotice(null); setBusy(true);
-    try {
-      const b = await api("/dpr-admin/buckets", {
-        method: "POST",
-        body: { alias: form.alias.trim().toLowerCase(), bucket_name: form.bucket_name.trim().replace(/^gs:\/\//, ""), label: form.label.trim() || null },
-      });
-      setForm({ alias: "", bucket_name: "", label: "" });
-      setNotice(`Added "${b.label || b.alias}". You can now pick it when giving a client data access.`);
-      reload();
-    } catch (err) { setError(err); } finally { setBusy(false); }
-  }
-
-  async function remove(b) {
-    if (!confirm(`Remove the bucket "${b.label || b.alias}" from the portal? The data in GCS is not touched.`)) return;
-    setError(null); setNotice(null);
-    try { await api(`/dpr-admin/buckets/${encodeURIComponent(b.alias)}`, { method: "DELETE" }); reload(); }
-    catch (err) { setError(err); }
-  }
+  const [buckets, error] = useLoad(() => api("/dpr-admin/buckets"), []);
 
   return (
     <>
       <div className="page-head">
         <h1>Buckets</h1>
         <p className="muted small" style={{ margin: 0, maxWidth: 560 }}>
-          The GCS buckets the portal can deliver from. Register a client's bucket here, then grant folders in it from that client's page.
+          The Google Cloud Storage buckets the portal delivers from. They are set in the server's
+          configuration, so this list is read-only. Grant a client folders from that client's page.
         </p>
       </div>
       <ErrorBox error={error} />
-      {notice && <div className="notice" role="status">{notice}</div>}
-
-      <form className="card" onSubmit={add} aria-labelledby="add-bucket-h">
-        <div className="card-head"><h2 id="add-bucket-h" style={{ fontSize: 16 }}>Add a bucket</h2></div>
-        <div className="card-body inline-form">
-          <label className="field">GCS bucket name
-            <input className="input mono" required placeholder="acme-deliveries" value={form.bucket_name}
-              onChange={(e) => setForm({ ...form, bucket_name: e.target.value })} />
-          </label>
-          <label className="field" style={{ flex: "0 1 180px" }}>Short name
-            <input className="input mono" required pattern="[a-z0-9][a-z0-9\-]{1,39}" title="Lowercase letters, numbers and dashes"
-              placeholder="acme" value={form.alias} onChange={(e) => setForm({ ...form, alias: e.target.value.toLowerCase() })} />
-          </label>
-          <label className="field">Display name (optional)
-            <input className="input" placeholder="ACME deliveries" value={form.label} onChange={(e) => setForm({ ...form, label: e.target.value })} />
-          </label>
-          <button className="btn btn-primary" disabled={busy}>{busy ? "Checking access…" : "Add bucket"}</button>
-        </div>
-        <p className="faint small" style={{ margin: "0 20px 16px" }}>
-          The portal checks it can read the bucket before saving. If it can't, grant the portal's service account
-          the Storage Object Viewer role on that bucket in Google Cloud, then try again.
-        </p>
-      </form>
 
       <div className="card table-wrap">
-        <table className="t" style={{ minWidth: 640 }}>
-          <thead><tr><th>Name</th><th>GCS bucket</th><th>Used by</th><th></th></tr></thead>
+        <table className="t" style={{ minWidth: 560 }}>
+          <thead><tr><th>Name</th><th>GCS bucket</th><th>Used by</th></tr></thead>
           <tbody>
             {buckets?.map((b) => (
               <tr key={b.alias}>
-                <td><div style={{ fontWeight: 500 }}>{b.label || b.alias}</div><div className="sub">{b.alias}{b.builtin && " · built in"}</div></td>
+                <td><div style={{ fontWeight: 500 }}>{b.label || b.alias}</div><div className="sub">{b.alias}</div></td>
                 <td className="mono">gs://{b.bucket_name}</td>
                 <td className={b.used_by.length ? "" : "faint"}>{b.used_by.length ? b.used_by.join(", ") : "No clients yet"}</td>
-                <td style={{ textAlign: "right" }}>
-                  {b.builtin
-                    ? <span className="faint small">Set in server config</span>
-                    : <button className="btn btn-ghost btn-sm" style={{ color: b.used_by.length ? undefined : "var(--danger)" }}
-                        disabled={b.used_by.length > 0} title={b.used_by.length ? "Remove clients' access to it first" : undefined}
-                        onClick={() => remove(b)}>Remove</button>}
-                </td>
               </tr>
             ))}
           </tbody>
         </table>
         {!buckets && !error && <p className="muted" style={{ padding: 20 }}>Loading…</p>}
       </div>
+      {buckets?.some((b) => b.alias === "lake") && (
+        <div className="error" role="alert">
+          The internal data-lake bucket is listed because a client has been given access to it. That is raw data:
+          check this is intended, and remove it from that client's page if not.
+        </div>
+      )}
     </>
   );
 }
